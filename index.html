@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interplanetary Ships</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Courier New', monospace;
+      overflow: hidden;
+      background: #000;
+    }
+    #container {
+      width: 100vw;
+      height: 100vh;
+    }
+    .ui-panel {
+      position: absolute;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 16px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    #traffic-control {
+      top: 16px;
+      left: 16px;
+    }
+    #texture-control {
+      top: 16px;
+      right: 16px;
+      max-width: 350px;
+    }
+    .stat-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 4px 0;
+    }
+    .title {
+      font-weight: bold;
+      margin-bottom: 8px;
+      color: #4dd0e1;
+    }
+    input, select {
+      width: 100%;
+      background: #333;
+      color: white;
+      padding: 6px 8px;
+      border: 1px solid #555;
+      border-radius: 4px;
+      font-size: 12px;
+      margin: 4px 0;
+    }
+    button {
+      background: #1e88e5;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      margin: 4px 4px 4px 0;
+    }
+    button:hover {
+      background: #1565c0;
+    }
+    .hint {
+      font-size: 11px;
+      color: #999;
+      margin-top: 4px;
+    }
+    .status {
+      font-size: 11px;
+      color: #4caf50;
+      margin-top: 4px;
+    }
+    #footer {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+  
+  <div id="traffic-control" class="ui-panel">
+    <div class="title">TRAFFIC CONTROL</div>
+    <div class="stat-line">
+      <span style="color: #4caf50">● Orbiting:</span>
+      <span id="orbiting">0</span>
+    </div>
+    <div class="stat-line">
+      <span style="color: #ffeb3b">● Landing:</span>
+      <span id="landing">0</span>
+    </div>
+    <div class="stat-line">
+      <span style="color: #ff9800">● Departing:</span>
+      <span id="departing">0</span>
+    </div>
+  </div>
+
+  <div id="texture-control" class="ui-panel">
+    <div class="title">Planet Configuration</div>
+    
+    <div style="margin-bottom: 12px;">
+      <label style="display: block; margin-bottom: 4px; font-size: 12px;">Format:</label>
+      <select id="format-select">
+        <option value="texture">2D Texture (PNG/JPG)</option>
+        <option value="gltf">GLTF/GLB Model</option>
+        <option value="obj">OBJ Model</option>
+        <option value="fbx">FBX Model</option>
+      </select>
+    </div>
+
+    <div id="texture-input-group">
+      <label style="display: block; margin-bottom: 4px; font-size: 12px;">Texture URL:</label>
+      <input type="text" id="texture-url" placeholder="Enter texture URL...">
+      <button onclick="loadTexture()">Load Texture</button>
+      <button onclick="useProceduralTexture()">Use Procedural</button>
+    </div>
+
+    <div id="model-input-group" style="display: none;">
+      <label style="display: block; margin-bottom: 4px; font-size: 12px;">Model URL:</label>
+      <input type="text" id="model-url" placeholder="Enter model URL...">
+      <button onclick="loadModel()">Load from URL</button>
+      
+      <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #555;">
+        <label style="display: block; margin-bottom: 4px; font-size: 12px;">Or Upload Local File:</label>
+        <input type="file" id="model-file" accept=".fbx,.obj,.gltf,.glb" style="font-size: 11px; padding: 4px;">
+        <button onclick="loadLocalModel()" style="margin-top: 4px;">Load Local File</button>
+      </div>
+    </div>
+
+    <div class="hint" id="status-text">Procedural planet loaded</div>
+    
+    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #444;">
+      <div style="font-size: 11px; font-weight: bold; margin-bottom: 4px;">Quick Presets:</div>
+      <button onclick="loadPreset('earth')">Earth</button>
+      <button onclick="loadPreset('mars')">Mars</button>
+      <button onclick="loadPreset('moon')">Moon</button>
+    </div>
+  </div>
+
+  <div id="netalertx-control" class="ui-panel" style="top: 16px; left: calc(50% - 175px);">
+    <div class="title">NetAlertX Integration</div>
+    <div>
+      <label for="api-endpoint" style="font-size: 12px;">API Endpoint:</label>
+      <input type="text" id="api-endpoint" placeholder="http://192.168.1.8:20212/graphql">
+      
+      <label for="api-token" style="font-size: 12px;">Bearer Token:</label>
+      <input type="password" id="api-token" placeholder="Enter your bearer token">
+      
+      <div style="margin-top: 8px;">
+        <button onclick="testConnection()">Test Connection</button>
+        <button onclick="fetchDevices()">Fetch Devices</button>
+      </div>
+      
+      <div class="hint" id="api-status" style="margin-top: 8px;">Not connected</div>
+    </div>
+  </div>
+
+  <div id="footer">Camera auto-rotating | Ships spawn dynamically</div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+  <script>
+
+    let scene, camera, renderer, planet, atmosphere;
+    let ships = [];
+    let planetGeometry, planetMaterial;
+    let currentPlanetObject = null;
+
+    // Scene setup
+    function init() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x000510);
+      
+      const container = document.getElementById('container');
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(15, 10, 15);
+      camera.lookAt(0, 0, 0);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      container.appendChild(renderer.domElement);
+
+      // Stars
+      const starsGeometry = new THREE.BufferGeometry();
+      const starsMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.1 });
+      const starsVertices = [];
+      for (let i = 0; i < 1000; i++) {
+        starsVertices.push(
+          (Math.random() - 0.5) * 200,
+          (Math.random() - 0.5) * 200,
+          (Math.random() - 0.5) * 200
+        );
+      }
+      starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
+      scene.add(new THREE.Points(starsGeometry, starsMaterial));
+
+      // Initial procedural planet
+      createProceduralPlanet();
+
+      // Atmosphere
+      const atmosphereGeometry = new THREE.SphereGeometry(5.3, 32, 32);
+      const atmosphereMaterial = new THREE.MeshBasicMaterial({
+        color: 0x4488ff,
+        transparent: true,
+        opacity: 0.2,
+        side: THREE.BackSide
+      });
+      atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+      scene.add(atmosphere);
+
+      // Lighting
+      const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+      sunLight.position.set(20, 10, 20);
+      scene.add(sunLight);
+
+      const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+      scene.add(ambientLight);
+
+      // Initialize ships
+      for (let i = 0; i < 8; i++) ships.push(new Ship('orbiting'));
+      for (let i = 0; i < 3; i++) ships.push(new Ship('landing'));
+      for (let i = 0; i < 2; i++) ships.push(new Ship('departing'));
+
+      window.addEventListener('resize', onResize);
+      animate();
+    }
+
+    function createProceduralPlanet() {
+      if (currentPlanetObject) {
+        scene.remove(currentPlanetObject);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      
+      ctx.fillStyle = '#1a4d8f';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      for (let i = 0; i < 2000; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? '#154180' : '#1f5aa0';
+        ctx.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, Math.random() * 3, Math.random() * 3);
+      }
+      
+      const landmasses = [
+        { x: 0.2, y: 0.3, size: 0.15, color: '#2d5016' },
+        { x: 0.5, y: 0.5, size: 0.12, color: '#3a6b1f' },
+        { x: 0.75, y: 0.25, size: 0.08, color: '#2d5016' },
+        { x: 0.15, y: 0.7, size: 0.1, color: '#3a6b1f' },
+        { x: 0.85, y: 0.6, size: 0.13, color: '#2d5016' },
+        { x: 0.4, y: 0.15, size: 0.06, color: '#4a7b2f' },
+        { x: 0.65, y: 0.8, size: 0.09, color: '#3a6b1f' }
+      ];
+      
+      landmasses.forEach(land => {
+        const centerX = land.x * canvas.width;
+        const centerY = land.y * canvas.height;
+        const maxRadius = land.size * canvas.width;
+        
+        for (let i = 0; i < 8; i++) {
+          const angle = (i / 8) * Math.PI * 2;
+          const distance = Math.random() * maxRadius * 0.5;
+          const x = centerX + Math.cos(angle) * distance;
+          const y = centerY + Math.sin(angle) * distance;
+          const radius = maxRadius * (0.5 + Math.random() * 0.5);
+          
+          ctx.fillStyle = land.color;
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        
+        ctx.fillStyle = 'rgba(210, 180, 140, 0.3)';
+        for (let i = 0; i < 5; i++) {
+          const angle = (i / 5) * Math.PI * 2;
+          const distance = maxRadius * 0.9;
+          const x = centerX + Math.cos(angle) * distance;
+          const y = centerY + Math.sin(angle) * distance;
+          ctx.beginPath();
+          ctx.arc(x, y, 15, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+      
+      ctx.fillStyle = '#e8f4f8';
+      ctx.fillRect(0, 0, canvas.width, 40);
+      ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+      
+      for (let i = 0; i < 50; i++) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.beginPath();
+        ctx.arc(
+          Math.random() * canvas.width,
+          Math.random() < 0.5 ? Math.random() * 50 : canvas.height - Math.random() * 50,
+          Math.random() * 20,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+      }
+      
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      
+      planetGeometry = new THREE.SphereGeometry(5, 64, 64);
+      planetMaterial = new THREE.MeshPhongMaterial({
+        map: texture,
+        emissive: 0x112244,
+        shininess: 10
+      });
+      planet = new THREE.Mesh(planetGeometry, planetMaterial);
+      currentPlanetObject = planet;
+      scene.add(planet);
+      
+      updateStatus('Procedural planet loaded');
+    }
+
+    // Ship class
+    class Ship {
+      constructor(type) {
+        this.type = type;
+        this.mesh = this.createShipMesh();
+        scene.add(this.mesh);
+        
+        if (type === 'orbiting') {
+          this.angle = Math.random() * Math.PI * 2;
+          this.orbitRadius = 7 + Math.random() * 3;
+          this.orbitSpeed = 0.002 + Math.random() * 0.003;
+          this.verticalOffset = (Math.random() - 0.5) * 2;
+        } else if (type === 'landing') {
+          this.angle = Math.random() * Math.PI * 2;
+          this.altitude = 15 + Math.random() * 10;
+          this.targetAltitude = 5.5;
+          this.descendSpeed = 0.02;
+        } else if (type === 'departing') {
+          this.angle = Math.random() * Math.PI * 2;
+          this.altitude = 5.5;
+          this.targetAltitude = 30;
+          this.ascendSpeed = 0.03;
+        }
+      }
+
+      createShipMesh() {
+        const group = new THREE.Group();
+        
+        const bodyGeometry = new THREE.CylinderGeometry(0.1, 0.15, 0.4, 8);
+        const bodyMaterial = new THREE.MeshPhongMaterial({ color: 0xcccccc });
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        group.add(body);
+
+        const cockpitGeometry = new THREE.SphereGeometry(0.12, 8, 8);
+        const cockpitMaterial = new THREE.MeshPhongMaterial({ 
+          color: 0x4488ff,
+          emissive: 0x2244aa,
+          transparent: true,
+          opacity: 0.8
+        });
+        const cockpit = new THREE.Mesh(cockpitGeometry, cockpitMaterial);
+        cockpit.position.y = 0.15;
+        group.add(cockpit);
+
+        const engineGeometry = new THREE.SphereGeometry(0.08, 8, 8);
+        const engineMaterial = new THREE.MeshBasicMaterial({ 
+          color: this.type === 'departing' ? 0xff6600 : 0x00ffff,
+          transparent: true,
+          opacity: 0.7
+        });
+        const engine = new THREE.Mesh(engineGeometry, engineMaterial);
+        engine.position.y = -0.25;
+        group.add(engine);
+
+        group.scale.set(0.5, 0.5, 0.5);
+        return group;
+      }
+
+      update() {
+        if (this.type === 'orbiting') {
+          this.angle += this.orbitSpeed;
+          this.mesh.position.x = Math.cos(this.angle) * this.orbitRadius;
+          this.mesh.position.z = Math.sin(this.angle) * this.orbitRadius;
+          this.mesh.position.y = this.verticalOffset;
+          this.mesh.lookAt(0, 0, 0);
+        } else if (this.type === 'landing') {
+          this.altitude -= this.descendSpeed;
+          if (this.altitude <= this.targetAltitude) {
+            this.altitude = this.targetAltitude;
+            this.type = 'orbiting';
+            this.orbitRadius = 7 + Math.random() * 3;
+            this.orbitSpeed = 0.002 + Math.random() * 0.003;
+            this.verticalOffset = (Math.random() - 0.5) * 2;
+          }
+          this.mesh.position.x = Math.cos(this.angle) * (this.altitude * 0.7);
+          this.mesh.position.z = Math.sin(this.angle) * (this.altitude * 0.7);
+          this.mesh.position.y = this.altitude - 5;
+          const direction = new THREE.Vector3(0, 0, 0).sub(this.mesh.position).normalize();
+          this.mesh.lookAt(this.mesh.position.clone().add(direction));
+        } else if (this.type === 'departing') {
+          this.altitude += this.ascendSpeed;
+          if (this.altitude >= this.targetAltitude) {
+            scene.remove(this.mesh);
+            return false;
+          }
+          this.mesh.position.x = Math.cos(this.angle) * (this.altitude * 0.5);
+          this.mesh.position.z = Math.sin(this.angle) * (this.altitude * 0.5);
+          this.mesh.position.y = this.altitude - 5;
+          const direction = this.mesh.position.clone().normalize();
+          this.mesh.lookAt(this.mesh.position.clone().add(direction));
+        }
+        return true;
+      }
+    }
+
+    let lastSpawn = Date.now();
+    const spawnInterval = 3000;
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      for (let i = ships.length - 1; i >= 0; i--) {
+        if (!ships[i].update()) {
+          ships.splice(i, 1);
+        }
+      }
+
+      const now = Date.now();
+      if (now - lastSpawn > spawnInterval) {
+        lastSpawn = now;
+        const rand = Math.random();
+        if (rand < 0.4 && ships.filter(s => s.type === 'orbiting').length < 12) {
+          ships.push(new Ship('landing'));
+        } else if (rand < 0.7 && ships.filter(s => s.type === 'orbiting').length > 3) {
+          const orbitingShips = ships.filter(s => s.type === 'orbiting');
+          if (orbitingShips.length > 0) {
+            const ship = orbitingShips[Math.floor(Math.random() * orbitingShips.length)];
+            ship.type = 'departing';
+            ship.altitude = 5.5;
+            ship.targetAltitude = 30;
+            ship.ascendSpeed = 0.03;
+          }
+        }
+      }
+
+      const stats = ships.reduce((acc, ship) => {
+        acc[ship.type]++;
+        return acc;
+      }, { orbiting: 0, landing: 0, departing: 0 });
+      
+      document.getElementById('orbiting').textContent = stats.orbiting;
+      document.getElementById('landing').textContent = stats.landing;
+      document.getElementById('departing').textContent = stats.departing;
+
+      if (currentPlanetObject) {
+        currentPlanetObject.rotation.y += 0.001;
+      }
+      atmosphere.rotation.y += 0.001;
+
+      const time = Date.now() * 0.0001;
+      camera.position.x = Math.cos(time) * 15;
+      camera.position.z = Math.sin(time) * 15;
+      camera.lookAt(0, 0, 0);
+
+      renderer.render(scene, camera);
+    }
+
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function updateStatus(message, isError = false) {
+      const statusEl = document.getElementById('status-text');
+      statusEl.textContent = message;
+      statusEl.style.color = isError ? '#f44336' : '#4caf50';
+    }
+
+    // Load functions
+    window.loadTexture = function() {
+      const url = document.getElementById('texture-url').value.trim();
+      if (!url) {
+        updateStatus('Please enter a texture URL', true);
+        return;
+      }
+
+      updateStatus('Loading texture...');
+      const loader = new THREE.TextureLoader();
+      loader.load(
+        url,
+        (texture) => {
+          if (currentPlanetObject) {
+            scene.remove(currentPlanetObject);
+          }
+
+          texture.wrapS = THREE.RepeatWrapping;
+          texture.wrapT = THREE.ClampToEdgeWrapping;
+
+          planetGeometry = new THREE.SphereGeometry(5, 64, 64);
+          planetMaterial = new THREE.MeshPhongMaterial({
+            map: texture,
+            emissive: 0x112244,
+            shininess: 10
+          });
+          planet = new THREE.Mesh(planetGeometry, planetMaterial);
+          currentPlanetObject = planet;
+          scene.add(planet);
+          
+          updateStatus('Texture loaded successfully!');
+        },
+        undefined,
+        (error) => {
+          updateStatus('Failed to load texture. Using procedural.', true);
+          createProceduralPlanet();
+        }
+      );
+    };
+
+    window.loadModel = function() {
+      const url = document.getElementById('model-url').value.trim();
+      const format = document.getElementById('format-select').value;
+      
+      if (!url) {
+        updateStatus('Please enter a model URL', true);
+        return;
+      }
+
+      updateStatus('Loading model...');
+      
+      let loader;
+      if (format === 'gltf') {
+        loader = new THREE.GLTFLoader();
+      } else if (format === 'obj') {
+        loader = new THREE.OBJLoader();
+      } else if (format === 'fbx') {
+        loader = new THREE.FBXLoader();
+      }
+
+      loader.load(
+        url,
+        (object) => {
+          if (currentPlanetObject) {
+            scene.remove(currentPlanetObject);
+          }
+
+          let model = format === 'gltf' ? object.scene : object;
+          
+          // Scale and position model
+          const box = new THREE.Box3().setFromObject(model);
+          const size = box.getSize(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const scale = 10 / maxDim; // Scale to roughly planet size
+          model.scale.set(scale, scale, scale);
+          
+          // Center the model
+          box.setFromObject(model);
+          const center = box.getCenter(new THREE.Vector3());
+          model.position.sub(center);
+
+          currentPlanetObject = model;
+          scene.add(model);
+          
+          updateStatus('Model loaded successfully!');
+        },
+        (progress) => {
+          if (progress.total > 0) {
+            const percent = (progress.loaded / progress.total * 100).toFixed(0);
+            updateStatus(`Loading model... ${percent}%`);
+          }
+        },
+        (error) => {
+          console.error(error);
+          updateStatus('Failed to load model. Using procedural.', true);
+          createProceduralPlanet();
+        }
+      );
+    };
+
+    window.useProceduralTexture = function() {
+      createProceduralPlanet();
+    };
+
+    window.loadPreset = function(preset) {
+      const presets = {
+        earth: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/planets/earth_atmos_2048.jpg',
+        mars: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/planets/mars_1k_color.jpg',
+        moon: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/planets/moon_1024.jpg'
+      };
+      
+      document.getElementById('format-select').value = 'texture';
+      document.getElementById('texture-input-group').style.display = 'block';
+      document.getElementById('model-input-group').style.display = 'none';
+      document.getElementById('texture-url').value = presets[preset];
+      loadTexture();
+    };
+
+    window.loadLocalModel = function() {
+      const fileInput = document.getElementById('model-file');
+      const file = fileInput.files[0];
+      
+      if (!file) {
+        updateStatus('Please select a file', true);
+        return;
+      }
+
+      const format = document.getElementById('format-select').value;
+      updateStatus('Loading local model...');
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const contents = e.target.result;
+        
+        let loader;
+        if (format === 'gltf') {
+          loader = new THREE.GLTFLoader();
+        } else if (format === 'obj') {
+          loader = new THREE.OBJLoader();
+        } else if (format === 'fbx') {
+          loader = new THREE.FBXLoader();
+        }
+
+        try {
+          // For binary formats (FBX, GLB), we need ArrayBuffer
+          // For text formats (OBJ, GLTF), we can use text
+          let data = contents;
+          
+          if (format === 'fbx') {
+            // FBX loader expects a path, so we'll use a data URL approach
+            const blob = new Blob([contents], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            
+            loader.load(
+              url,
+              (object) => {
+                processLoadedModel(object, format);
+                URL.revokeObjectURL(url);
+              },
+              undefined,
+              (error) => {
+                console.error(error);
+                updateStatus('Failed to load FBX file. Try another format.', true);
+              }
+            );
+          } else if (format === 'gltf' || format === 'obj') {
+            // For GLTF/OBJ, parse directly
+            if (format === 'gltf') {
+              // Check if it's binary (.glb) or text (.gltf)
+              const isBinary = file.name.toLowerCase().endsWith('.glb');
+              if (isBinary) {
+                loader.parse(contents, '', (gltf) => {
+                  processLoadedModel(gltf, format);
+                });
+              } else {
+                // Text GLTF
+                const text = new TextDecoder().decode(contents);
+                loader.parse(text, '', (gltf) => {
+                  processLoadedModel(gltf, format);
+                });
+              }
+            } else if (format === 'obj') {
+              const text = new TextDecoder().decode(contents);
+              const object = loader.parse(text);
+              processLoadedModel(object, format);
+            }
+          }
+        } catch (error) {
+          console.error(error);
+          updateStatus('Error parsing model file', true);
+        }
+      };
+
+      // Read as ArrayBuffer for binary formats
+      if (format === 'fbx' || file.name.toLowerCase().endsWith('.glb')) {
+        reader.readAsArrayBuffer(file);
+      } else {
+        reader.readAsArrayBuffer(file);
+      }
+    };
+
+    function processLoadedModel(object, format) {
+      if (currentPlanetObject) {
+        scene.remove(currentPlanetObject);
+      }
+
+      let model = format === 'gltf' ? object.scene : object;
+      
+      // Scale and position model
+      const box = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const scale = 10 / maxDim;
+      model.scale.set(scale, scale, scale);
+      
+      // Center the model
+      box.setFromObject(model);
+      const center = box.getCenter(new THREE.Vector3());
+      model.position.sub(center);
+
+      currentPlanetObject = model;
+      scene.add(model);
+      
+      updateStatus('Local model loaded successfully!');
+    }
+
+    // Format selector handler
+    document.getElementById('format-select').addEventListener('change', (e) => {
+      const isTexture = e.target.value === 'texture';
+      document.getElementById('texture-input-group').style.display = isTexture ? 'block' : 'none';
+      document.getElementById('model-input-group').style.display = isTexture ? 'none' : 'block';
+    });
+
+    async function testConnection() {
+      const endpoint = document.getElementById('api-endpoint').value.trim();
+      const token = document.getElementById('api-token').value.trim();
+      
+      if (!endpoint || !token) {
+        updateStatus('Please enter both API endpoint and token.', true);
+        return;
+      }
+
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ query: '{ devices { id name } }' }) // Example query
+        });
+
+        if (!response.ok) throw new Error('Network response was not ok');
+
+        const data = await response.json();
+        document.getElementById('api-status').textContent = 'Connected! Devices fetched: ' + data.devices.length;
+      } catch (error) {
+        document.getElementById('api-status').textContent = 'Connection failed: ' + error.message;
+      }
+    }
+
+    async function fetchDevices() {
+      const endpoint = document.getElementById('api-endpoint').value.trim();
+      const token = document.getElementById('api-token').value.trim();
+
+      if (!endpoint || !token) {
+        updateStatus('Please enter both API endpoint and token.', true);
+        return;
+      }
+
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ query: '{ devices { id name } }' }) // Example query
+        });
+
+        if (!response.ok) throw new Error('Network response was not ok');
+
+        const data = await response.json();
+        console.log('Fetched devices:', data.devices);
+        // You can add logic here to display devices in the UI
+      } catch (error) {
+        updateStatus('Failed to fetch devices: ' + error.message, true);
+      }
+    }
+    
+    init();
+  </script>
+</body>
+</html>
